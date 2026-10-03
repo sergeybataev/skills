@@ -5,10 +5,10 @@ description: Data-led monthly performance read from the worklog — merged PRs a
 
 # Performance read
 
-Scripts are in `../../scripts/` relative to this skill's base directory (`$S`). Needs the worklog config — if `python3 $S/perf_metrics.py --months 1` says there's no config, run the `setup` skill first.
+Scripts are in `../../scripts/` relative to this skill's base directory (`$S`). Respects `[features]` — if `perf` is off, say so and stop. Needs the worklog config — if `python3 $S/perf_metrics.py --months 1` says there's no config, run the `setup` skill first.
 
 ```bash
-python3 $S/perf_metrics.py --months 6          # table
+python3 $S/perf_metrics.py --months 6          # table (adds reviews columns when features.reviews is on)
 python3 $S/perf_metrics.py --months 6 --json   # for further analysis
 ```
 

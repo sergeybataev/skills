@@ -53,6 +53,30 @@ class Config:
         self.digests = _x(w.get("digests", os.path.join(self.wiki_hub, ".sessions/digests")))
 
         self.rules = d.get("rules", {}).get("items", [])
+        self.features = d.get("features", {})
+
+    # Every collected source and every output can be switched off in [features].
+    # Defaults keep older configs working: jira/wiki-dependent features follow
+    # jira.enabled / wiki.enabled; the slow review-response-time metric is opt-in.
+    FEATURE_DEFAULTS = {
+        "prs": True,                    # PRs you authored
+        "reviews": True,                # reviews and comments you gave on others' PRs
+        "review_response_time": False,  # time from review request to your review (1 extra API call per PR)
+        "commits": True,
+        "jira": None,                   # None → follow jira.enabled
+        "sessions": None,               # session digests → follow wiki.enabled
+        "wiki_closeout": None,          # llm-wiki close-out note → follow wiki.enabled
+        "session_index": None,          # PR↔session resume index → follow wiki.enabled
+        "perf": True,                   # /worklog:perf
+    }
+
+    def on(self, name):
+        if name in self.features:
+            return bool(self.features[name])
+        dflt = self.FEATURE_DEFAULTS.get(name, True)
+        if dflt is None:
+            return self.jira_enabled if name == "jira" else self.wiki_enabled
+        return dflt
 
     @property
     def ticket_re(self):

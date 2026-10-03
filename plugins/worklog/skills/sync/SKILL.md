@@ -15,7 +15,9 @@ python3 -c "import sys; sys.path.insert(0,'$S'); import wlconfig, json; c=wlconf
 ```
 **No config → run the `setup` skill first** (tell the user, then follow it), and come back.
 
-Read the whole config: identity, Jira, schedule, paths, wiki — and **`rules.items`, which are the user's standing rules for this job. They override anything generic below.** Below, `<board>`, `<tracker>` etc. mean the configured paths under `paths.notes_root`.
+Read the whole config: identity, Jira, schedule, paths, wiki, **`[features]`** — and **`rules.items`, which are the user's standing rules for this job. They override anything generic below.** Below, `<board>`, `<tracker>` etc. mean the configured paths under `paths.notes_root`.
+
+**`[features]` switches each source and output on or off** — `prs`, `reviews`, `review_response_time`, `commits`, `jira`, `sessions`, `wiki_closeout`, `session_index`, `perf`. Check with `wlconfig.load().on("<name>")` (it applies the defaults: jira follows `jira.enabled`, the session/wiki ones follow `wiki.enabled`, `review_response_time` is off). **Skip every step below whose feature is off, and say once in the reply which ones were skipped** — silently missing sources look like "nothing happened".
 
 | File | Job |
 |---|---|
@@ -42,7 +44,7 @@ Start at the board's **`Last synced …` line** — the authoritative marker; ev
 
 ## Step 2 — collect (in parallel)
 
-**GitHub** — check the account first; a wrong account returns an *empty list, not an error*:
+**GitHub PRs** (`prs`) — check the account first; a wrong account returns an *empty list, not an error*:
 ```bash
 gh api user -q .login     # must equal identity.github_user; else gh auth switch --user <it>
 # for each org in identity.github_orgs:
@@ -60,13 +62,19 @@ Every open PR: `gh pr view <n> -R <owner/repo> --json isDraft,reviewRequests,rev
 
 Merged PRs: read the body (`gh pr view <n> --json body`) for measured effects — latency, memory, minutes, parity counts. Those numbers make the tracker entry useful later.
 
-**Jira** (if `jira.enabled`; Atlassian MCP, `cloudId = jira.cloud_id`):
+**Reviews given** (`reviews`) — the PRs the user reviewed or commented on that someone else wrote:
+```bash
+python3 $S/reviews.py --since <since> --until <today> [--json]     # read-only; add --response-time if that feature is on
+```
+It finds candidates with search, then keeps only the user's reviews/comments timestamped inside the window (search alone matches on the PR's update time). Reviewing is real output that leaves no trace in the user's own PR list — include it in the reply and the tracker.
+
+**Jira** (`jira`; Atlassian MCP, `cloudId = jira.cloud_id`):
 - Open + recent: `(assignee = currentUser() AND (updated >= "<since>" OR statusCategory != Done)) OR (reporter = currentUser() AND created >= "<since>")`, plus keys referenced by in-window commits/PRs that aren't the user's (to see who owns them).
 - Changed: `assignee = currentUser() AND updated >= "<since>"`; if empty, run a wider positive control (`<since − 14d>`) — empty can mean "nothing changed" or "query broken".
 - Request `jira.sprint_field` and read sprint name, board, `endDate`, `state`, `completeDate` from it. Sprint dates move — read them, never assume. `endDate` is UTC: convert to `schedule.timezone` and state the weekday.
 - `openSprints()` is board-agnostic; with several `jira.boards`, report each board's sprint separately. Watch for sprints that closed and left the user's tickets sprint-less.
 
-**Commits**:
+**Commits** (`commits`):
 ```bash
 python3 $S/collect.py --since <since> --until <today> --no-github --no-sessions   # stdout only
 ```
@@ -80,12 +88,12 @@ git rev-list --count <branch> --not --remotes      # commits that exist on no re
 ```
 Non-zero = unpushed work. (A squash-merged branch also shows commits here — check `gh pr list --head <branch> --state merged` before flagging it.)
 
-**Sessions** (if `wiki.enabled`) — parse frontmatter of `<wiki.hub>/.sessions/digests/**/*.md`; keep only `cwd` inside an `identity.code_roots` path (other tools create many empty digests).
+**Sessions** (`sessions`) — parse frontmatter of `<wiki.hub>/.sessions/digests/**/*.md`; keep only `cwd` inside an `identity.code_roots` path (other tools create many empty digests).
 - In window = `last_seen_at` in window. But `tool_event_count` is a **lifetime** total — for the effort split count only sessions whose `started_at` is in the window; list resumed ones by name without counts.
 - **Unpromoted** = `promoted_to` is `[]`/empty (a regex like `promoted_to:\s*\S` matches `[]` — don't). Also check digests from the **previous sync's window** only: a session still live after that sync gets its frontmatter rewritten by the capture hook, so its promotion reverts. Re-promote those to the previous close-out note (the one whose window contains their `last_seen_at`) and say how many. Older `[]` digests predate the promotion practice — leave them.
 - **Branch attribution** (digest field `git_branch`) — sessions in a `identity.primary_checkouts` root carry whatever branch was checked out; that share is an artefact. Worktree sessions are usually reliable, but a deleted/detached worktree reports the primary's branch too. Trust a branch only when the worktree folder plausibly matches it; say which shares are artefacts.
 
-**Things no source can see** — oncall/support rotations, meetings, reviews given. If the user mentions them or the window covers a rotation, ask for the thread or list rather than guessing.
+**Things no source can see** — oncall/support rotations, meetings, pairing, reviews done outside GitHub. If the user mentions them or the window covers a rotation, ask for the thread or list rather than guessing.
 
 ## Step 3 — diff against the board
 
@@ -109,14 +117,15 @@ Walk every board item against what you collected. Stale claims are often the mos
 - `#initiative` — self-initiated (tag even if a ticket was filed afterwards). The strongest promotion evidence, and the work that leaves least trace.
 - `#assigned` — ticket, sprint commitment or request.
 - `#incident` — incident, production issue, oncall.
+- `#review` — reviews given (when `reviews` is on): **one summary entry per sync**, e.g. `- **<today>** — Reviewed 23 PRs by 10 people (21 approved, 1 comment-only, 10 inline comments) … #review`, plus a separate line only for reviews that mattered (changes requested, a bug caught, a long thread). One line per approval would drown the tracker.
 
 **Sprint doc** — every write-sync gets a delta, even a short one (a skipped delta breaks the next window). Insert `## 0. Week-N delta (<since> → <today>)` above the previous one and rename the previous to `## 0b` (shift `0b`→`0c`…). Narrative: what changed, why it matters, what didn't move. No standing sections.
 
-**Wiki close-out** (if enabled) — `<hub>/topics/<topic>/raw/notes/<today>-<slug>.md` with frontmatter (`title`, `source: "MANUAL"`, `type: notes`, `ingested`, `tags`, `summary`): effort table, merged list, work with no record, structural gaps. Then add a row at the top of `raw/notes/_index.md` (set `Last updated`), prepend a Recent Changes bullet to `raw/_index.md` and the topic `_index.md`, set its `Sources:` count from an actual file count, and set `promoted_to: ["topics/<topic>/raw/notes/<file>"]` on every in-window digest whose list was empty.
+**Wiki close-out** (`wiki_closeout`) — `<hub>/topics/<topic>/raw/notes/<today>-<slug>.md` with frontmatter (`title`, `source: "MANUAL"`, `type: notes`, `ingested`, `tags`, `summary`): effort table, merged list, work with no record, structural gaps. Then add a row at the top of `raw/notes/_index.md` (set `Last updated`), prepend a Recent Changes bullet to `raw/_index.md` and the topic `_index.md`, set its `Sources:` count from an actual file count, and set `promoted_to: ["topics/<topic>/raw/notes/<file>"]` on every in-window digest whose list was empty.
 
-**Session index** — `python3 $S/session_index.py` (~45 s).
+**Session index** (`session_index`) — `python3 $S/session_index.py` (~45 s).
 
-Read-only safety: `collect.py` writes only with `--out`; `perf_metrics.py` never writes; `session_index.py` **does** write — don't run it for report-only requests.
+Read-only safety: `collect.py` writes only with `--out`; `perf_metrics.py` and `reviews.py` never write; `session_index.py` **does** write — don't run it for report-only requests.
 
 ## Step 6 — verify before claiming done
 
@@ -129,6 +138,7 @@ Read-only safety: `collect.py` writes only with `--out`; `perf_metrics.py` never
 
 Lead with the window and the one or two things that matter most. Then:
 1. **What shipped** — merged PRs grouped by stream, with measured effects.
+1b. **Reviews given** — count, verdict mix, and any that mattered (if `reviews` is on).
 2. **Work with no record** — unpushed branches, unticketed effort, epics not updated.
 3. **Action list** — numbered, cheapest/highest-leverage first.
 4. **Files written**, and any correction to an earlier claim — plainly, once.

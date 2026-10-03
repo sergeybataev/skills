@@ -20,6 +20,9 @@ Usage
   worklog-collect.py --days 7
   worklog-collect.py --week                # current Sun-Thu work week
   worklog-collect.py --no-github           # git only, offline
+  worklog-collect.py --no-reviews          # skip reviews you gave (else on if features.reviews)
+
+Each source also follows its [features] switch in the config (prs, reviews, commits, sessions).
   worklog-collect.py --raw                 # every commit, no roll-up
   worklog-collect.py --out draft.md        # write instead of stdout
 
@@ -205,6 +208,7 @@ def main():
     ap.add_argument("--week", action="store_true", help="current Sun–Thu work week")
     ap.add_argument("--no-github", action="store_true")
     ap.add_argument("--no-sessions", action="store_true")
+    ap.add_argument("--no-reviews", action="store_true")
     ap.add_argument("--raw", action="store_true", help="list every commit")
     ap.add_argument("--today", help="override today (YYYY-MM-DD), for testing")
     ap.add_argument("--out")
@@ -226,9 +230,23 @@ def main():
         lt = last_tracker_date()
         since = lt or (today - dt.timedelta(days=7)).isoformat()
 
-    commits, landed = collect_commits(since, until)
-    gh, gh_note = ({}, "skipped (--no-github)") if a.no_github else collect_github(since, until)
-    sessions = {} if a.no_sessions else collect_sessions(since, until)
+    commits, landed = collect_commits(since, until) if CFG.on("commits") else ({}, [])
+    if a.no_github or not CFG.on("prs"):
+        gh, gh_note = {}, "PRs skipped (--no-github or features.prs = false)"
+    else:
+        gh, gh_note = collect_github(since, until)
+    sessions = {} if (a.no_sessions or not CFG.on("sessions")) else collect_sessions(since, until)
+    revs, rev_note = [], None
+    if CFG.on("reviews") and not (a.no_github or a.no_reviews):
+        import reviews
+        who = run(["gh", "api", "user", "-q", ".login"]).strip()
+        if who == CFG.github_user:
+            try:
+                revs = reviews.collect(CFG, since, until)
+            except RuntimeError as e:
+                rev_note = f"reviews failed: {e}"
+        else:
+            rev_note = f"reviews skipped — gh is '{who}', not {CFG.github_user}"
 
     L = []
     W = L.append
@@ -279,6 +297,28 @@ def main():
             top = ", ".join(f"{k}×{v}" for k, v in sessions[day].most_common(3))
             W(f"- claude sessions: {top}")
         W("")
+
+    if revs or rev_note:
+        import reviews
+        s = reviews.summary(revs)
+        L.append("## Reviews given")
+        L.append("")
+        if rev_note:
+            L.append(f"> ⚠ {rev_note}")
+            L.append("")
+        if revs:
+            L.append(f"**{s['prs_reviewed']} PRs** by {s['authors']} people · {s['approved']} approved · "
+                     f"{s['changes_requested']} changes requested · {s['commented_only']} comment-only · "
+                     + (f"{s['dismissed']} dismissed · " if s["dismissed"] else "")
+                     + f"{s['inline_comments']} inline comments"
+                     + (f" · median response {s['median_response_hours']} h" if s["median_response_hours"] is not None else "")
+                     + " · tag `#review`")
+            L.append("")
+            for r in revs:
+                L.append(f"- **{r['last']}** — `{r['repo']}` [#{r['number']}]({r['url']}) — *{r['title']}* "
+                         f"by {r['author']}: **{r['verdict'].replace('_', ' ').lower()}**"
+                         + (f", {r['inline_comments']} inline comment(s)" if r["inline_comments"] else ""))
+            L.append("")
 
     if landed:
         L.append("## Landed in this window, authored earlier")

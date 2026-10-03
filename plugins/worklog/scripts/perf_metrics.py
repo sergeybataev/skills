@@ -37,7 +37,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--months", type=int, default=6)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--no-reviews", action="store_true")
     a = ap.parse_args()
+    if not CFG.on("perf"):
+        sys.exit("perf is disabled in [features] — set perf = true to use it")
 
     if sh(["gh", "api", "user", "-q", ".login"]).strip() != CFG.github_user:
         sys.exit(f"gh is not {CFG.github_user} — run: gh auth switch --user {CFG.github_user}")
@@ -78,8 +81,14 @@ def main():
                 if cm.group(2):
                     b.scopes[cm.group(2)] += 1
 
+    rev_by_month = collections.defaultdict(list)
+    if CFG.on("reviews") and not a.no_reviews:
+        import reviews
+        for r in reviews.collect(CFG, since, today.isoformat()):
+            rev_by_month[r["last"][:7]].append(r)
+
     rows = []
-    for k in sorted(k for k in m if k >= since[:7]):
+    for k in sorted(k for k in set(m) | set(rev_by_month) if k >= since[:7]):
         b = m[k]
         n = len(b.commits)
         t = b.ttm
@@ -94,14 +103,28 @@ def main():
             "top_types": b.types.most_common(5),
             "top_scopes": b.scopes.most_common(5),
         })
+        rv = rev_by_month.get(k, [])
+        rt = [r["response_hours"] for r in rv if r["response_hours"] is not None]
+        rows[-1].update({
+            "reviews_given": len(rv),
+            "changes_requested_pct": round(100 * sum(r["verdict"] == "CHANGES_REQUESTED" for r in rv) / len(rv)) if rv else None,
+            "review_inline_comments": sum(r["inline_comments"] for r in rv),
+            "review_response_median_h": statistics.median(rt) if rt else None,
+        })
     if a.json:
         print(json.dumps(rows, indent=2))
         return
-    print(f"{'month':8} {'merged':>6} {'ttm med':>7} {'mean':>5} {'max':>4} {'commits':>7} {'c/PR':>5} {'ticket%':>7}  top scopes")
+    revs_on = CFG.on("reviews") and not a.no_reviews
+    resp_on = revs_on and CFG.on("review_response_time")
+    print(f"{'month':8} {'merged':>6} {'ttm med':>7} {'mean':>5} {'max':>4} {'commits':>7} {'c/PR':>5} {'ticket%':>7}"
+          + (f" {'reviews':>7} {'chg%':>4} {'inline':>6}" if revs_on else "")
+          + (f" {'resp h':>6}" if resp_on else "") + "  top scopes")
     for r in rows:
         f = lambda v: "-" if v is None else v
         print(f"{r['month']:8} {r['merged']:>6} {f(r['ttm_median']):>7} {f(r['ttm_mean']):>5} {f(r['ttm_max']):>4} "
-              f"{r['commits']:>7} {f(r['commits_per_merged_pr']):>5} {f(r['ticket_coverage_pct']):>7}  "
+              f"{r['commits']:>7} {f(r['commits_per_merged_pr']):>5} {f(r['ticket_coverage_pct']):>7}"
+              + (f" {r['reviews_given']:>7} {f(r['changes_requested_pct']):>4} {r['review_inline_comments']:>6}" if revs_on else "")
+              + (f" {f(r['review_response_median_h']):>6}" if resp_on else "") + "  "
               + ", ".join(f"{s}={n}" for s, n in r["top_scopes"][:3]))
     print(f"\n{len(prs)} merged PRs since {since}; current month is partial.")
 

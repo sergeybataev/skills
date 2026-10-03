@@ -41,6 +41,7 @@ Use AskUserQuestion, at most 4 questions per call, recommended option first, det
 - **Identity**: work gh account; orgs to include (multi-select from detected); commit emails to count (multi-select — personal addresses often appear in work repos).
 - **Schedule**: timezone (the system zone may not be the work zone — ask explicitly) and work week (e.g. Sun–Thu vs Mon–Fri).
 - **Notes**: use the detected board folder, or a new folder (create from `../sync/assets/` templates). Separate board/tracker filenames only if they already use different ones.
+- **Features** (multi-select, all on by default except the slow one): PRs authored, reviews given, review response time (slower — one extra API call per reviewed PR), commits, Jira, sessions, wiki close-out note, session index, monthly perf read. Write the answers to `[features]`; anything not asked keeps its default.
 - **Wiki**: use the detected llm-wiki hub for session capture and close-out notes, or not.
 - **Jira policy** (if enabled): projects whose tickets someone else transitions (e.g. a service-desk project closed by support), and transitions never to make (e.g. `QA -> Done`).
 - **Rules**: free text — anything the sync must always or never do in this job (branches that never get a PR, how to phrase reminders, who owns what). Offer to import relevant items from the user's memory/CLAUDE.md files if they exist, and show what you'd import.
@@ -58,6 +59,8 @@ Shape (omit what doesn't apply):
   "identity": {"github_user": "", "github_orgs": [], "commit_emails": [], "code_roots": ["~/src/org"],
                "repos": ["org/name"], "primary_checkouts": [], "base_branches": ["main"],
                "integration_branches": []},
+  "features": {"prs": true, "reviews": true, "review_response_time": false, "commits": true,
+               "jira": true, "sessions": true, "wiki_closeout": true, "session_index": true, "perf": true},
   "jira": {"enabled": true, "site": "", "cloud_id": "", "sprint_field": "customfield_NNNNN",
            "ticket_prefixes": [], "read_only_projects": [], "forbidden_transitions": [],
            "boards": [{"id": 0, "name": "", "sprint_example": ""}]},

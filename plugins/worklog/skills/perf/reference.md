@@ -23,6 +23,8 @@ Add from the other sources:
 | Commits per merged PR | PR granularity. Rising sharply (e.g. 4 → 13) usually means work concentrated into a few large PRs; re-cutting them into small ones typically restores throughput within a week. |
 | Ticket coverage (% of commits citing a ticket) | Legibility. Low coverage (e.g. 13%) means most work has no organisational trace. |
 | Effort vs output | Commits/session effort up while merges down = work concentrated into unmerged streams, not idleness. Say which. |
+| Reviews given / month, changes-requested share, inline comments | Reviewing is output that never shows in the user's own PR list. All-approve with no inline comments over many months can read as rubber-stamping; a steady share of substantive reviews is strong evidence of technical leadership. |
+| Review response time (opt-in) | Median hours from "review requested" to the user's first review. Long tails here are the mirror image of the user's own PRs stalling for reviewers. |
 | Customer-visible regressions + detection gap | The detection gap (e.g. 14 days) is usually the more useful lesson than the defect. |
 
 ## Structure of the answer

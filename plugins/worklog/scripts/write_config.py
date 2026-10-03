@@ -12,7 +12,7 @@ import argparse, datetime as dt, json, os, shutil, sys, tomllib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wlconfig  # noqa: E402
 
-ORDER = ["identity", "jira", "schedule", "paths", "wiki", "rules"]
+ORDER = ["identity", "features", "jira", "schedule", "paths", "wiki", "rules"]
 REQUIRED = {"identity": ["github_user", "github_orgs", "commit_emails", "code_roots"],
             "paths": ["notes_root", "board", "tracker"]}
 
