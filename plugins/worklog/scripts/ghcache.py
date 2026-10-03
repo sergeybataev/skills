@@ -2,10 +2,15 @@
 """Local SQLite store of your GitHub PRs and the reviews you gave, refreshed incrementally.
 
   ghcache.py refresh [--full]     # fetch what changed since the last refresh (or everything)
+  ghcache.py refresh --since 2026-09-01   # re-read everything updated since a date
+  ghcache.py refresh --overlap-days 7     # re-read a week before the last refresh
   ghcache.py stats                # what's stored and when it was last refreshed
 
-The other scripts call refresh() themselves, so you rarely run this by hand. Each refresh
-re-reads from one day before the last one: GitHub's search index lags, and a little overlap
+The other scripts call refresh() themselves, so you rarely run this by hand.
+Merged and closed PRs are final and never re-fetched; every PR that was still *open* at
+the last refresh is re-read directly by number, however old — so a close or merge can't hide
+behind the search index. Each refresh
+re-reads from [github] refresh_overlap_days (default 1) before the last one: GitHub's search index lags, and a little overlap
 is cheaper than a silently missed PR. Open-PR review *state* is not stored — it changes daily
 and prs.py reads it live.
 
@@ -18,7 +23,7 @@ import wlconfig  # noqa: E402
 
 CFG = wlconfig.load()
 U = CFG.github_user
-OVERLAP = dt.timedelta(days=1)
+OVERLAP = dt.timedelta(days=int(CFG.raw.get("github", {}).get("refresh_overlap_days", 1)))
 FRESH = dt.timedelta(minutes=10)   # a refresh newer than this is reused, not repeated
 
 
@@ -87,13 +92,15 @@ def repo_of(item):
     return item["repository_url"].split("/repos/", 1)[1]
 
 
-def watermark(con, key, full):
+def watermark(con, key, full, since=None, overlap=None):
     if full:
         return None
+    if since:
+        return CFG.bound(since).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     v = con.execute("SELECT v FROM meta WHERE k=?", (key,)).fetchone()
     if not v:
         return None
-    t = dt.datetime.fromisoformat(v[0].replace("Z", "+00:00")) - OVERLAP
+    t = dt.datetime.fromisoformat(v[0].replace("Z", "+00:00")) - (overlap or OVERLAP)
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -101,9 +108,9 @@ def stamp(con, key, started):
     con.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, started))
 
 
-def refresh_my_prs(con, full=False):
+def refresh_my_prs(con, full=False, since=None, overlap=None):
     started = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    cutoff = watermark(con, "my_prs_fetched", full)
+    cutoff = watermark(con, "my_prs_fetched", full, since, overlap)
     n = 0
     for org in CFG.github_orgs:
         for it in search(f"org:{org} is:pr author:{U}", cutoff):
@@ -111,6 +118,14 @@ def refresh_my_prs(con, full=False):
             con.execute("INSERT OR REPLACE INTO my_prs VALUES (?,?,?,?,?,?,?,?,?)", (
                 repo_of(it), it["number"], it["title"], it["state"], it["created_at"], it.get("closed_at"),
                 pr.get("merged_at"), it["updated_at"], it["html_url"]))
+            n += 1
+    # PRs still open last time: re-read by number (search can lag on state changes)
+    still_open = [r for r in con.execute("SELECT repo, number FROM my_prs WHERE state='open'")]
+    with cf.ThreadPoolExecutor(8) as ex:
+        for p in ex.map(lambda k: gh_api(f"repos/{k[0]}/pulls/{k[1]}"), still_open):
+            con.execute("UPDATE my_prs SET title=?, state=?, closed=?, merged=?, updated=? WHERE repo=? AND number=?",
+                        (p["title"], p["state"], p.get("closed_at"), p.get("merged_at"), p["updated_at"],
+                         p["base"]["repo"]["full_name"], p["number"]))
             n += 1
     stamp(con, "my_prs_fetched", started)
     con.commit()
@@ -131,14 +146,21 @@ def _one_reviewed(repo, num, timeline):
     return repo, num, rows, reqs
 
 
-def refresh_reviews(con, full=False):
+def refresh_reviews(con, full=False, since=None, overlap=None):
     started = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    cutoff = watermark(con, "reviews_fetched", full)
+    cutoff = watermark(con, "reviews_fetched", full, since, overlap)
     cands = {}
     for org in CFG.github_orgs:
         for qual in ("reviewed-by", "commenter"):
             for it in search(f"org:{org} is:pr {qual}:{U} -author:{U}", cutoff):
                 cands[(repo_of(it), it["number"])] = it
+    # reviewed PRs that were still open last time: re-read by number, however old
+    for repo, num in con.execute("SELECT repo, number FROM reviewed_prs WHERE state='open'").fetchall():
+        if (repo, num) not in cands:
+            p = gh_api(f"repos/{repo}/pulls/{num}")
+            cands[(repo, num)] = {"title": p["title"], "user": p["user"], "state": p["state"],
+                                  "pull_request": {"merged_at": p.get("merged_at")},
+                                  "updated_at": p["updated_at"], "html_url": p["html_url"]}
     timeline = CFG.on("review_response_time")
     with cf.ThreadPoolExecutor(8) as ex:
         results = list(ex.map(lambda k: _one_reviewed(k[0], k[1], timeline), cands))
@@ -161,9 +183,11 @@ def fresh(con, key):
     return bool(v) and dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(v[0].replace("Z", "+00:00")) < FRESH
 
 
-def refresh(full=False, prs=True, reviews=True):
+def refresh(full=False, prs=True, reviews=True, since=None, overlap_days=None):
     con = connect()
-    if not full and (not prs or fresh(con, "my_prs_fetched")) and \
+    overlap = dt.timedelta(days=overlap_days) if overlap_days else None
+    forced = full or since or overlap
+    if not forced and (not prs or fresh(con, "my_prs_fetched")) and \
             (not reviews or not CFG.on("reviews") or fresh(con, "reviews_fetched")):
         return con, {"skipped": "refreshed less than 10 minutes ago"}
     who = subprocess.run(["gh", "api", "user", "-q", ".login"], capture_output=True, text=True).stdout.strip()
@@ -171,9 +195,9 @@ def refresh(full=False, prs=True, reviews=True):
         sys.exit(f"gh is '{who}', not {U} — run: gh auth switch --user {U}")
     out = {}
     if prs:
-        out["my_prs_refreshed"] = refresh_my_prs(con, full)
+        out["my_prs_refreshed"] = refresh_my_prs(con, full, since, overlap)
     if reviews and CFG.on("reviews"):
-        out["reviewed_prs_refreshed"] = refresh_reviews(con, full)
+        out["reviewed_prs_refreshed"] = refresh_reviews(con, full, since, overlap)
     return con, out
 
 
@@ -181,9 +205,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["refresh", "stats"])
     ap.add_argument("--full", action="store_true")
+    ap.add_argument("--since", help="re-read everything updated since this date / 'date HH:MM'")
+    ap.add_argument("--overlap-days", type=int, help="re-read this many days before the last refresh")
     a = ap.parse_args()
     if a.cmd == "refresh":
-        _, out = refresh(a.full)
+        _, out = refresh(a.full, since=a.since, overlap_days=a.overlap_days)
         print(json.dumps(out))
     else:
         con = connect()

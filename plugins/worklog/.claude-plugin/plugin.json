@@ -1,7 +1,7 @@
 {
   "name": "worklog",
   "description": "Personal worklog from GitHub PRs, Jira, git commits and Claude/Codex sessions: weekly sync into a notes folder, monthly performance read, and a PR↔session resume index. Configured per user via /worklog:setup.",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "author": {
     "name": "Sergey Bataev"
   },

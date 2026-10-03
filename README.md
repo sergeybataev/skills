@@ -67,7 +67,7 @@ All in `plugins/worklog/scripts/`, all read the config, all accept `--since`/`--
 | `collect.py` | commits by day, deduplicated |
 | `sessions.py effort \| status \| promote \| verify` | effort inside the window from transcript timestamps; llm-wiki promotion |
 | `session_index.py` | PR/ticket/branch → resumable sessions |
-| `ghcache.py refresh [--full] \| stats` | local SQLite store of your PRs and the reviews you gave (`paths.data_db`), refreshed incrementally — perf reruns take seconds |
+| `ghcache.py refresh [--full] \| stats` | local SQLite store of your PRs and the reviews you gave (`paths.data_db`). Merged/closed PRs are final; open ones are re-read by number each refresh; `--since DATE` / `--overlap-days N` re-check further back |
 | `perf_metrics.py` | monthly delivery table |
 | `closeout.py index` · `verify.py` | wiki index bookkeeping · dead links and double checkboxes |
 
