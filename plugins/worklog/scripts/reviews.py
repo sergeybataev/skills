@@ -1,116 +1,55 @@
 #!/usr/bin/env python3
 """Reviews and comments you gave on other people's PRs, within a window.
 
-Finds candidate PRs with GitHub search (reviewed-by / commenter, excluding your own
-PRs), then reads each PR's reviews and comments and keeps only *your* activity whose
-timestamp falls in the window — search alone filters on the PR's update time, which
-moves whenever anyone touches it.
+Reads the local store (ghcache.py), refreshing it incrementally first: every review and
+comment you left on someone else's PR, with its own timestamp, so only activity inside the
+window counts — not PRs that merely got updated in it.
 
   reviews.py --since 2026-09-01 [--until 2026-09-30] [--json] [--response-time]
 
 --response-time adds hours from "review requested from you" to your next review
 (one extra timeline call per PR). Defaults to features.review_response_time.
 """
-import argparse, collections, concurrent.futures as cf, datetime as dt, json, os, statistics, subprocess, sys
+import argparse, collections, datetime as dt, json, os, statistics, subprocess, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wlconfig  # noqa: E402
 
-BOTS = ("[bot]",)
-
-
-def gh(path, paginate=True, **params):
-    cmd = ["gh", "api", "-X", "GET", path] + (["--paginate"] if paginate else [])
-    for k, v in params.items():
-        cmd += ["-f", f"{k}={v}"]
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    if r.returncode != 0:
-        raise RuntimeError(f"gh api {path}: {r.stderr.strip()[:200]}")
-    out = r.stdout.strip()
-    if not out:
-        return []
-    # --paginate concatenates JSON arrays/objects back to back
-    try:
-        return json.loads(out)
-    except json.JSONDecodeError:
-        return json.loads("[" + out.replace("][", "],[").replace("}{", "},{") + "]")
-
-
-def search(cfg, since):
-    """Candidate PRs: {(repo, number): search item}."""
-    found = {}
-    u = cfg.github_user
-    for org in cfg.github_orgs:
-        for qual in ("reviewed-by", "commenter"):
-            q = f"org:{org} is:pr {qual}:{u} -author:{u} updated:>={since[:10]}"
-            for page in range(1, 11):  # search API caps at 1000 results
-                res = gh("search/issues", paginate=False, q=q, per_page=100, page=page)
-                items = res.get("items", [])
-                for it in items:
-                    repo = it["repository_url"].split("/repos/", 1)[1]
-                    found[(repo, it["number"])] = it
-                if len(items) < 100:
-                    break
-    return found
-
-
-CFG_ = None
-
-
-def in_window(ts, since, until):
-    return CFG_.in_window(ts, since, until)
-
-
-def one_pr(cfg, repo, num, item, since, until, response_time):
-    u = cfg.github_user
-    reviews = [r for r in gh(f"repos/{repo}/pulls/{num}/reviews")
-               if r["user"]["login"] == u and in_window(r.get("submitted_at"), since, until)]
-    inline = [c for c in gh(f"repos/{repo}/pulls/{num}/comments")
-              if c["user"]["login"] == u and in_window(c.get("created_at"), since, until)]
-    convo = [c for c in gh(f"repos/{repo}/issues/{num}/comments")
-             if c["user"]["login"] == u and in_window(c.get("created_at"), since, until)]
-    if not (reviews or inline or convo):
-        return None
-    states = [r["state"] for r in sorted(reviews, key=lambda r: r["submitted_at"])]
-    rec = {
-        "repo": repo, "number": num, "title": item["title"],
-        "author": item["user"]["login"],
-        "pr_state": "merged" if (item.get("pull_request") or {}).get("merged_at") else item["state"],
-        "url": item["html_url"],
-        "verdict": states[-1] if states else "COMMENTED",
-        "reviews": len(reviews), "inline_comments": len(inline), "conversation_comments": len(convo),
-        "first": min([r["submitted_at"] for r in reviews] + [c["created_at"] for c in inline + convo])[:10],
-        "last": max([r["submitted_at"] for r in reviews] + [c["created_at"] for c in inline + convo])[:10],
-        "response_hours": None,
-    }
-    if response_time and reviews:
-        events = gh(f"repos/{repo}/issues/{num}/timeline")
-        reqs = sorted(e["created_at"] for e in events
-                      if e.get("event") == "review_requested"
-                      and (e.get("requested_reviewer") or {}).get("login") == u)
-        first_review = min(r["submitted_at"] for r in reviews)
-        before = [t for t in reqs if t <= first_review]
-        if before:
-            d = (dt.datetime.fromisoformat(first_review.replace("Z", "+00:00"))
-                 - dt.datetime.fromisoformat(before[-1].replace("Z", "+00:00")))
-            rec["response_hours"] = round(d.total_seconds() / 3600, 1)
-    return rec
-
-
 def collect(cfg, since, until, response_time=None):
-    global CFG_
-    CFG_ = cfg
+    """Your reviews/comments on others' PRs inside the window, read from the local store."""
+    import ghcache
     if response_time is None:
         response_time = cfg.on("review_response_time")
-    cands = search(cfg, since)
+    con, _ = ghcache.refresh(prs=False)
+    rows = [r for r in con.execute("SELECT kind, repo, number, state, ts FROM my_reviews WHERE ts IS NOT NULL")
+            if cfg.in_window(r[4], since, until)]
+    by_pr = collections.defaultdict(list)
+    for kind, repo, num, state, ts in rows:
+        by_pr[(repo, num)].append((kind, state, ts))
     out = []
-    with cf.ThreadPoolExecutor(max_workers=8) as ex:
-        futs = [ex.submit(one_pr, cfg, r, n, it, since, until, response_time)
-                for (r, n), it in cands.items()]
-        for f in cf.as_completed(futs):
-            rec = f.result()
-            if rec:
-                out.append(rec)
+    for (repo, num), acts in by_pr.items():
+        meta = con.execute("SELECT title, author, state, merged, url FROM reviewed_prs WHERE repo=? AND number=?",
+                           (repo, num)).fetchone() or ("", "", "", None, f"https://github.com/{repo}/pull/{num}")
+        reviews = sorted((ts, st) for k, st, ts in acts if k == "review")
+        rec = {
+            "repo": repo, "number": num, "title": meta[0], "author": meta[1],
+            "pr_state": "merged" if meta[3] else meta[2], "url": meta[4],
+            "verdict": reviews[-1][1] if reviews else "COMMENTED",
+            "reviews": len(reviews),
+            "inline_comments": sum(1 for k, _, _ in acts if k == "inline"),
+            "conversation_comments": sum(1 for k, _, _ in acts if k == "convo"),
+            "first": min(ts for _, _, ts in acts)[:10], "last": max(ts for _, _, ts in acts)[:10],
+            "response_hours": None,
+        }
+        if response_time and reviews:
+            first = reviews[0][0]
+            req = con.execute("SELECT max(ts) FROM review_requests WHERE repo=? AND number=? AND ts<=?",
+                              (repo, num, first)).fetchone()[0]
+            if req:
+                d = (dt.datetime.fromisoformat(first.replace("Z", "+00:00"))
+                     - dt.datetime.fromisoformat(req.replace("Z", "+00:00")))
+                rec["response_hours"] = round(d.total_seconds() / 3600, 1)
+        out.append(rec)
     return sorted(out, key=lambda r: (r["last"], r["repo"], r["number"]), reverse=True)
 
 

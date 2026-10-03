@@ -137,16 +137,15 @@ def main():
     if sh(["gh", "api", "user", "-q", ".login"]) != U:
         sys.exit(f"gh is not {U} — run: gh auth switch --user {U}")
 
-    merged, closed, opened = [], [], []
+    import ghcache  # merged/closed come from the local store (refreshed incrementally); open state is live
+    con, _ = ghcache.refresh(reviews=False)
+    rows = con.execute("SELECT repo, number, title, url, closed, merged FROM my_prs WHERE closed IS NOT NULL").fetchall()
+    as_item = lambda repo, n, title, url, ts: {"repository": {"nameWithOwner": repo}, "number": n,
+                                               "title": title, "url": url, "closedAt": ts}
+    merged = [as_item(r, n, t, u, m) for r, n, t, u, c, m in rows if m and CFG.in_window(m, a.since, until)]
+    closed = [as_item(r, n, t, u, c) for r, n, t, u, c, m in rows if not m and CFG.in_window(c, a.since, until)]
+    opened = []
     for org in CFG.github_orgs:
-        m = search(org, "--merged")
-        mk = {(r["repository"]["nameWithOwner"], r["number"]) for r in m}
-        merged += [r for r in m if CFG.in_window(r["closedAt"], a.since, until)]
-        closed += [r for r in search(org, "--state", "closed")
-                   if CFG.in_window(r["closedAt"], a.since, until)
-                   and (r["repository"]["nameWithOwner"], r["number"]) not in mk
-                   and not gj(["gh", "pr", "view", str(r["number"]), "-R", r["repository"]["nameWithOwner"],
-                               "--json", "mergedAt"]).get("mergedAt")]
         opened += search(org, "--state", "open")
     with cf.ThreadPoolExecutor(8) as ex:
         states = sorted(ex.map(open_state, opened), key=lambda s: -s["age_days"])

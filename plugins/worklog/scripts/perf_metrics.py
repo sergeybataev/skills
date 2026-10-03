@@ -55,11 +55,10 @@ def main():
     first = dt.date(y, mo, 1)
     since = first.isoformat()
 
-    prs = []
-    for org in CFG.github_orgs:
-        prs += json.loads(sh(["gh", "search", "prs", "--author", CFG.github_user, "--owner", org,
-                              "--merged", "--merged-at", f">={since}", "--limit", "1000",
-                              "--json", "repository,number,createdAt,closedAt"]) or "[]")
+    import ghcache  # merged PRs come from the local store, refreshed incrementally
+    con, _ = ghcache.refresh(reviews=False)
+    prs = [{"createdAt": c, "closedAt": m} for c, m in con.execute(
+        "SELECT created, merged FROM my_prs WHERE merged IS NOT NULL AND merged >= ?", (since,))]
     m = collections.defaultdict(Month)
     for p in prs:
         c, x = p["createdAt"][:10], p["closedAt"][:10]

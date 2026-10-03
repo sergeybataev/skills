@@ -48,6 +48,7 @@ python3 $S/sessions.py status --since "$SINCE" --until "$UNTIL" # llm-wiki diges
 ```
 
 What the scripts already handle — don't redo it:
+- **prs.py / reviews.py** read your merged/closed PRs and the reviews you gave from a local SQLite store (`ghcache.py`, `paths.data_db`), refreshed incrementally — only what changed since the last fetch, with a one-day overlap because GitHub's search index lags. Only open-PR review state is fetched live. If numbers ever look off, `python3 $S/ghcache.py refresh --full` rebuilds the store.
 - **prs.py** — PRs from scratch branches or titled "never/do not merge" are tagged `scratch` and never flagged for reviewers. Unpushed also catches a branch whose commits reached the remote only through *another* branch (no remote branch of its own). Org-wide search filtered client-side (GitHub's date qualifiers lag), each human's *latest* review (bots and the user ignored), findings per open PR: `approved-but-draft`, `approved-needs-more` (approved but `REVIEW_REQUIRED`), `changes-requested`, `no-reviewers`, `stacked-on:<base>`, `conflicting`, `reviewed-undecided`. Unpushed = branches touched in 30 days with commits on no remote and no merged PR; `identity.scratch_branches` are counted, not flagged.
 - **sessions.py effort** — from per-message transcript timestamps (minute resolution), so resumed sessions count only what they did in the window; branches worked mostly from a primary checkout are marked as possible artefacts.
 - **collect.py** — unique commit subjects by author time, stash pseudo-commits dropped, rebased-in commits listed separately.
@@ -56,6 +57,7 @@ What still needs you:
 - **Measured effects of merged PRs** — read their bodies (`gh pr view <n> -R <repo> --json body`) for latency, memory, minutes, parity counts. That's what makes a tracker entry useful later.
 - **Jira** (`jira`; Atlassian MCP, `cloudId = jira.cloud_id`):
   - JQL takes the time too — use `"<since>"` as `"yyyy-MM-dd HH:mm"`.
+  - **Keep the responses small:** request only `fields: ["key","summary","status","priority","updated","resolutiondate","duedate"]`. Add `jira.sprint_field` to **one** query only (open tickets) — each value repeats the full sprint goal text on every ticket, ~10k tokens for a normal board.
   - Open + recent: `(assignee = currentUser() AND (updated >= "<since>" OR statusCategory != Done)) OR (reporter = currentUser() AND created >= "<since>")`, plus keys referenced by in-window commits/PRs that aren't the user's.
   - Changed: `assignee = currentUser() AND updated >= "<since>"`; if empty, run a wider positive control — empty can mean "nothing changed" or "query broken".
   - Request `jira.sprint_field`; read sprint name, board, `endDate` (UTC — convert to `schedule.timezone` and give the weekday), `state`, `completeDate`. With several `jira.boards`, report each board's sprint. Watch for closed sprints that left tickets sprint-less.

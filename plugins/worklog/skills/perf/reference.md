@@ -10,12 +10,12 @@ python3 $S/perf_metrics.py --json     # same, machine-readable
 ```
 
 Add from the other sources:
-- **Jira**: tickets resolved and created in the month; overdue tickets (due date vs today); tickets that bounced back (QA → In Progress).
+- **Jira**: tickets resolved and created in the month (request only `key, summary, status, created, resolutiondate, duedate` — not the sprint field, which repeats the sprint goal on every ticket); overdue tickets (due date vs today); tickets that bounced back (QA → In Progress).
 - **Sessions**: tool events by branch for the month (worktree branches only are reliable — see the branch-attribution note in the sync skill).
 - **Sprint goal**: read it from the configured `jira.sprint_field` and say plainly how much of the month's work maps onto it.
 - **The tracker**: count `#initiative` / `#assigned` / `#incident` for the month.
 
-Commit counts come from branches that still exist locally (`git log --all`): deleting or rewriting local branches removes their unmerged commits from earlier months, so a month's count can shrink later. Merged-PR counts come from GitHub and don't move.
+Merged PRs and reviews come from the local store (`ghcache.py`), so a rerun costs a few seconds; `ghcache.py refresh --full` rebuilds it. Commit counts come from branches that still exist locally (`git log --all`): deleting or rewriting local branches removes their unmerged commits from earlier months, so a month's count can shrink later. Merged-PR counts come from GitHub and don't move.
 
 ## Metrics that have proved meaningful
 
