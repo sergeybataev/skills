@@ -37,7 +37,7 @@ If there's no Atlassian MCP or the user doesn't use Jira, set `jira.enabled = fa
 
 Use AskUserQuestion, at most 4 questions per call, recommended option first, detected values pre-filled in the option labels. Cover:
 
-- **Branches**: confirm default base branches, and ask for long-lived **integration branches** PRs legitimately target (e.g. a team `develop`) — without them every PR into one looks stacked.
+- **Branches**: confirm default base branches, and ask for long-lived **integration branches** PRs legitimately target (e.g. a team `develop`) — without them every PR into one looks stacked. Show the default **scratch branch** patterns (`backup/*`, `tmp/*`, `wip/*`, `exp/*`, `rebase-*`, `throwaway/*`) — local branches matching them are never reported as unpushed work — and ask if they use others.
 - **Identity**: work gh account; orgs to include (multi-select from detected); commit emails to count (multi-select — personal addresses often appear in work repos).
 - **Schedule**: timezone (the system zone may not be the work zone — ask explicitly) and work week (e.g. Sun–Thu vs Mon–Fri).
 - **Notes**: use the detected board folder, or a new folder (create from `../sync/assets/` templates). Separate board/tracker filenames only if they already use different ones.
@@ -59,7 +59,7 @@ Shape (omit what doesn't apply):
 {
   "identity": {"github_user": "", "github_orgs": [], "commit_emails": [], "code_roots": ["~/src/org"],
                "repos": ["org/name"], "primary_checkouts": [], "base_branches": ["main"],
-               "integration_branches": []},
+               "integration_branches": [], "scratch_branches": ["backup/*", "tmp/*", "wip/*", "exp/*", "rebase-*", "throwaway/*"]},
   "features": {"prs": true, "reviews": true, "review_response_time": false, "commits": true,
                "jira": true, "transcripts": true, "sessions": true, "closeout": true, "session_index": true, "perf": true,
                "perf_save": true},

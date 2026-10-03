@@ -46,7 +46,7 @@ CFG = wlconfig.load()
 DB = CFG.p["sessions_db"]
 MD = CFG.p["sessions_index"]
 GH_USER = CFG.github_user
-PARSER_VERSION = "3"
+PARSER_VERSION = "5"
 SURVEY_LIMIT = 10
 MENTION_TOP = 3
 MENTION_MIN = 3
@@ -96,6 +96,8 @@ def parse_transcript(path):
     sid, first_cwd, cur, title, tools = None, "", "", "", 0
     cwds, ts = collections.Counter(), []
     branches = collections.defaultdict(lambda: [0, 0])   # branch -> [messages, messages from a worktree]
+    effort = collections.Counter()                         # "YYYY-MM-DDTHH:MM|branch|wt" (UTC minute) -> tool calls
+    cur_branch, cur_ts = "", ""
     urls, nums, tickets = collections.Counter(), collections.Counter(), collections.Counter()
     with open(path, errors="ignore") as fh:
         for line in fh:
@@ -110,17 +112,22 @@ def parse_transcript(path):
                 cwds[cur] += 1
             m = BR_RE.search(line)
             if m and m.group(1) not in ("", "HEAD"):
-                b = branches[unq(m.group(1))]
+                cur_branch = unq(m.group(1))
+                b = branches[cur_branch]
                 b[0] += 1
                 b[1] += is_worktree(cur)
             m = TS_RE.search(line)
             if m:
                 ts.append(m.group(1))
+                cur_ts = m.group(1)
             m = TITLE_RE.search(line)
             if m:
                 title = unq(m.group(1))
             if '"type":"assistant"' in line:
-                tools += line.count(TOOL_USE)
+                k = line.count(TOOL_USE)
+                tools += k
+                if k and cur_ts:
+                    effort[f"{cur_ts[:16]}|{cur_branch}|{is_worktree(cur)}"] += k
             for repo, n in PR_URL_RE.findall(line):
                 urls[f"{repo}#{n}"] += 1
             for n in PR_NUM_RE.findall(line):
@@ -132,7 +139,7 @@ def parse_transcript(path):
         "cwd": first_cwd,                                         # launch folder — where --resume works
         "main_cwd": cwds.most_common(1)[0][0] if cwds else first_cwd,
         "branches": dict(branches), "started": min(ts) if ts else "", "last_seen": max(ts) if ts else "",
-        "tool_events": tools, "title": title,
+        "tool_events": tools, "title": title, "effort": dict(effort),
         "mentions": {"urls": dict(urls), "nums": dict(nums), "tickets": dict(tickets)},
     }
 

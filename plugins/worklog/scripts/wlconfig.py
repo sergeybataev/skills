@@ -33,6 +33,9 @@ class Config:
         self.primary_checkouts = idn.get("primary_checkouts", [])
         self.base_branches = idn.get("base_branches", ["main", "master"])
         self.integration_branches = idn.get("integration_branches", [])
+        # local scratch branches: counted, never flagged as unpushed work
+        self.scratch_branches = idn.get("scratch_branches",
+                                        ["backup/*", "tmp/*", "wip/*", "exp/*", "rebase-*", "throwaway/*"])
 
         j = d.get("jira", {})
         self.jira_enabled = j.get("enabled", False)
@@ -103,6 +106,33 @@ class Config:
             return dt.datetime.now(ZoneInfo(self.timezone))
         except Exception:
             return dt.datetime.now()
+
+    # ---- time windows: a bound is a date ("2026-10-02") or a datetime ("2026-10-02 19:40"),
+    # read in schedule.timezone. Everything is compared as aware datetimes.
+    def tz(self):
+        try:
+            from zoneinfo import ZoneInfo
+            return ZoneInfo(self.timezone)
+        except Exception:
+            return dt.timezone.utc
+
+    def bound(self, s, end=False):
+        s = s.strip().replace("T", " ")
+        if len(s) == 10:
+            d = dt.datetime.fromisoformat(s)
+            d = d.replace(hour=23, minute=59, second=59) if end else d
+        else:
+            d = dt.datetime.fromisoformat(s)
+        return d if d.tzinfo else d.replace(tzinfo=self.tz())
+
+    def in_window(self, ts, since, until):
+        """ts: GitHub/ISO timestamp string (UTC 'Z' or with offset)."""
+        if not ts:
+            return False
+        d = dt.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if not d.tzinfo:
+            d = d.replace(tzinfo=dt.timezone.utc)
+        return self.bound(since) <= d <= self.bound(until, end=True)
 
     def report_path(self, kind, slug=""):
         """Where a report goes. closeout → llm-wiki when the wiki is on, else paths.reports."""

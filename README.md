@@ -54,6 +54,21 @@ python3 <plugin>/scripts/session_index.py --ticket ABC-123
 python3 <plugin>/scripts/session_index.py --branch feature/x       # falls back to sessions that mention it
 ```
 
+### Scripts
+
+All in `plugins/worklog/scripts/`, all read the config, all accept `--since`/`--until` as a date or `"YYYY-MM-DD HH:MM"`:
+
+| Script | Does |
+|---|---|
+| `syncstate.py window \| mark \| week` | sync window from the exact time of the last sync; current work week |
+| `prs.py` | merged / closed / open PRs with review findings (approved-but-draft, needs another approval, changes requested, stacked, conflicting, no reviewers) and unpushed branches |
+| `reviews.py` | reviews and comments you gave on others' PRs |
+| `collect.py` | commits by day, deduplicated |
+| `sessions.py effort \| status \| promote \| verify` | effort inside the window from transcript timestamps; llm-wiki promotion |
+| `session_index.py` | PR/ticket/branch → resumable sessions |
+| `perf_metrics.py` | monthly delivery table |
+| `closeout.py index` · `verify.py` | wiki index bookkeeping · dead links and double checkboxes |
+
 ### Safety
 
 The skills never commit, never transition tickets, never comment on PRs or issues, and never change PR state unless you explicitly ask for that specific action. The tracker is append-only: corrections are new dated entries.

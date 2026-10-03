@@ -81,26 +81,32 @@ def collect_commits(since, until, lookback_days=120):
     seen = set()
     by_day = collections.defaultdict(list)
     landed_earlier = []
-    wide = (dt.date.fromisoformat(since) - dt.timedelta(days=lookback_days)).isoformat()
+    wide = (dt.date.fromisoformat(since[:10]) - dt.timedelta(days=lookback_days)).isoformat()
+    subjects = set()
     for repo in git_repos():
         repo_name = os.path.basename(repo)
-        fmt = "%H%x1f%ad%x1f%cd%x1f%s"
+        fmt = "%H%x1f%aI%x1f%cI%x1f%s"
         out = run(
             ["git", "log", "--all", "--no-merges", *[f"--author={e}" for e in CFG.commit_emails],
              # NB: a bare date makes git approxidate fill in the CURRENT time,
              # so "--since=2026-08-10" means "since 22:07 today". Always pin the clock.
-             f"--since={wide} 00:00:00", f"--until={until} 23:59:59",
-             f"--pretty={fmt}", "--date=short"],
+             f"--since={wide} 00:00:00", f"--until={until[:10]} 23:59:59",
+             f"--pretty={fmt}"],
             cwd=repo,
         )
         for line in out.splitlines():
             parts = line.split("\x1f")
             if len(parts) < 4:
                 continue
-            sha, adate, cdate, subject = parts[0], parts[1], parts[2], parts[3]
-            if sha in seen:
-                continue
+            sha, a_iso, c_iso, subject = parts[0], parts[1], parts[2], parts[3]
+            if sha in seen or subject.startswith(("index on ", "untracked files on ", "WIP on ")):
+                continue  # git-stash pseudo-commits
             seen.add(sha)
+            if subject in subjects:
+                continue  # same commit on several branches after a rebase/cherry-pick
+            subjects.add(subject)
+            local = lambda iso: dt.datetime.fromisoformat(iso).astimezone(CFG.tz()).date().isoformat()
+            adate, cdate = local(a_iso), local(c_iso)
             m = CONV_RE.match(subject)
             rec = {
                 "sha": sha[:10],
@@ -112,9 +118,9 @@ def collect_commits(since, until, lookback_days=120):
                 "scope": (m.group("scope") or "") if m else "",
                 "tickets": sorted({t.upper() for t in TICKET_RE.findall(subject)}),
             }
-            if since <= adate <= until:
+            if CFG.in_window(a_iso, since, until):
                 by_day[adate].append(rec)
-            elif since <= cdate <= until:
+            elif CFG.in_window(c_iso, since, until):
                 landed_earlier.append(rec)
     return by_day, landed_earlier
 

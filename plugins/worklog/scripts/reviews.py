@@ -42,7 +42,7 @@ def search(cfg, since):
     u = cfg.github_user
     for org in cfg.github_orgs:
         for qual in ("reviewed-by", "commenter"):
-            q = f"org:{org} is:pr {qual}:{u} -author:{u} updated:>={since}"
+            q = f"org:{org} is:pr {qual}:{u} -author:{u} updated:>={since[:10]}"
             for page in range(1, 11):  # search API caps at 1000 results
                 res = gh("search/issues", paginate=False, q=q, per_page=100, page=page)
                 items = res.get("items", [])
@@ -54,8 +54,11 @@ def search(cfg, since):
     return found
 
 
+CFG_ = None
+
+
 def in_window(ts, since, until):
-    return bool(ts) and since <= ts[:10] <= until
+    return CFG_.in_window(ts, since, until)
 
 
 def one_pr(cfg, repo, num, item, since, until, response_time):
@@ -95,6 +98,8 @@ def one_pr(cfg, repo, num, item, since, until, response_time):
 
 
 def collect(cfg, since, until, response_time=None):
+    global CFG_
+    CFG_ = cfg
     if response_time is None:
         response_time = cfg.on("review_response_time")
     cands = search(cfg, since)
