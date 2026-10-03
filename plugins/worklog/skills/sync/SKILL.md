@@ -31,6 +31,8 @@ If the board has a **How to use** section, read it — it may hold conventions n
 
 ```bash
 python3 $S/syncstate.py window      # {"since": "2026-10-03 17:55", "until": "...", "source": "..."}
+# first sync with [sprint] source = "jira": it asks for the active sprint's start —
+#   python3 $S/syncstate.py window --sprint-start <startDate of the active sprint, from jira.sprint_field>
 python3 $S/syncstate.py week        # current work week: {"start", "end", "label"}
 ```
 `since` is the exact time the last sync finished, so nothing is re-checked. A sync on a day outside `schedule.work_week` (e.g. a weekend) belongs to the work week that just ended — `week` already returns that one. Use `since`/`until` verbatim as `--since`/`--until` for every script below — they accept dates or "date HH:MM" in the configured timezone. State the window in one line; if `source` says "date only", mention that the whole first day is re-checked and compare against the tracker before logging anything.

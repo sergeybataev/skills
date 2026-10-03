@@ -5,8 +5,8 @@ The aim is an honest, data-led read he can use at a review — including the par
 ## Collect
 
 ```bash
-python3 $S/perf_metrics.py --months 6            # merges, TTM, commits, ratio, ticket coverage
-python3 $S/perf_metrics.py --months 6 --json     # same, machine-readable
+python3 $S/perf_metrics.py            # over [perf] months: merges, TTM, commits, ratio, ticket coverage, reviews
+python3 $S/perf_metrics.py --json     # same, machine-readable
 ```
 
 Add from the other sources:
@@ -14,6 +14,8 @@ Add from the other sources:
 - **Sessions**: tool events by branch for the month (worktree branches only are reliable — see the branch-attribution note in the sync skill).
 - **Sprint goal**: read it from the configured `jira.sprint_field` and say plainly how much of the month's work maps onto it.
 - **The tracker**: count `#initiative` / `#assigned` / `#incident` for the month.
+
+Commit counts come from branches that still exist locally (`git log --all`): deleting or rewriting local branches removes their unmerged commits from earlier months, so a month's count can shrink later. Merged-PR counts come from GitHub and don't move.
 
 ## Metrics that have proved meaningful
 

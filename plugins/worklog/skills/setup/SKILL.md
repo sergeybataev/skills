@@ -42,7 +42,14 @@ Use AskUserQuestion, at most 4 questions per call, recommended option first, det
 - **Schedule**: timezone (the system zone may not be the work zone — ask explicitly) and work week (e.g. Sun–Thu vs Mon–Fri).
 - **Notes**: use the detected board folder, or a new folder (create from `../sync/assets/` templates). Separate board/tracker filenames only if they already use different ones.
 - **Reports folder** (`paths.reports`, relative to the notes folder, default `reports`): where close-out notes go when there's no wiki, and where each perf read is saved. Filenames are templates — `closeout_note` (default `closeouts/{date}-{slug}.md`) and `perf_report` (default `perf/{datetime}.md`); fields `{date}` `{datetime}` `{month}` `{slug}`. Only ask about the templates if the user wants a different layout.
-- **Features** (multi-select, all on by default except the slow one): PRs authored, reviews given, review response time (slower — one extra API call per reviewed PR), commits, Jira, Claude Code transcripts, llm-wiki session digests, per-sync close-out note, session index, monthly perf read, saving each perf read. The session index needs only transcripts; llm-wiki is optional. Write the answers to `[features]`; anything not asked keeps its default.
+- **Features** (multi-select, all on by default except the slow one): PRs authored, reviews given, review response time (slower — one extra API call per reviewed PR), commits, Jira, Claude Code transcripts, llm-wiki session digests, per-sync close-out note, session index. (The perf review is its own question below.) The session index needs only transcripts; llm-wiki is optional. Write the answers to `[features]`; anything not asked keeps its default.
+- **Sprints** (`[sprint]`) — only decides the *first* sync's window (later syncs start at the previous sync). Ask how their sprints work; no default:
+  - Jira sprints → `source = "jira"` (the sync reads the active sprint's start date).
+  - Fixed cadence without Jira → `source = "fixed"`, `anchor` = the first day of any sprint, `length_days` (e.g. 14).
+  - No sprints → `source = "none"`, `first_days` = how far back the first sync should look.
+- **Perf review** — first ask whether they want `/worklog:perf` at all (a data-led read of their delivery for review or promotion cycles).
+  - No → `features.perf = false`, `features.perf_save = false`; skip the span.
+  - Yes → ask the span (`perf.months`): 3 (quarter), 6 (half-year review), 12 (annual review), or since they joined (ask the date, compute the months). **No default** — it depends on their review cycle. Also ask whether to save each read (`perf_save`).
 - **Wiki**: use the detected llm-wiki hub for session capture and close-out notes, or not.
 - **Jira policy** (if enabled): projects whose tickets someone else transitions (e.g. a service-desk project closed by support), and transitions never to make (e.g. `QA -> Done`).
 - **Rules**: free text — anything the sync must always or never do in this job (branches that never get a PR, how to phrase reminders, who owns what). Offer to import relevant items from the user's memory/CLAUDE.md files if they exist, and show what you'd import.
@@ -72,6 +79,8 @@ Shape (omit what doesn't apply):
             "sessions_index": "Sessions index.md", "sessions_db": "sessions.sqlite",
             "reports": "reports"},
   "wiki": {"enabled": true, "hub": "~/...", "topic": "worklog"},
+  "sprint": {"source": "jira | fixed | none", "anchor": "YYYY-MM-DD", "length_days": 14, "first_days": 14},
+  "perf": {"months": "<the number the user chose — no default>"},
   "rules": {"items": []}
 }
 ```

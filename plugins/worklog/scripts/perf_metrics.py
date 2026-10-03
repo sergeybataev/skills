@@ -2,7 +2,7 @@
 """Per-month delivery metrics: merged PRs + time-to-merge (every configured org, configured gh user),
 unique commits authored, commits per merged PR, ticket coverage, commit types/scopes.
 
-  perf_metrics.py --months 6 [--json]        settings from ~/.config/worklog/config.toml
+  perf_metrics.py [--months N] [--json]      months from [perf] months in the config, or --months
 """
 import argparse, collections, dataclasses, datetime as dt, json, os, re, statistics, subprocess, sys
 
@@ -35,12 +35,16 @@ def month(d):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--months", type=int, default=6)
+    ap.add_argument("--months", type=int, default=None)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--no-reviews", action="store_true")
     a = ap.parse_args()
     if not CFG.on("perf"):
         sys.exit("perf is disabled in [features] — set perf = true to use it")
+    a.months = a.months or CFG.perf_months
+    if not a.months:
+        sys.exit("perf.months is not set — ask how many months the read should cover, then run: "
+                 "write_config.py --set perf.months=<N>")
 
     if sh(["gh", "api", "user", "-q", ".login"]).strip() != CFG.github_user:
         sys.exit(f"gh is not {CFG.github_user} — run: gh auth switch --user {CFG.github_user}")
@@ -65,7 +69,8 @@ def main():
 
     seen = set()
     for repo in CFG.git_repos():
-        out = sh(["git", "log", "--all", "--no-merges", *[f"--author={e}" for e in CFG.commit_emails],
+        # oldest first: a commit duplicated by a later rebase is credited to when it was first written
+        out = sh(["git", "log", "--all", "--no-merges", "--reverse", *[f"--author={e}" for e in CFG.commit_emails],
                   f"--since={since} 00:00:00", "--pretty=%ad\x1f%s", "--date=short"], cwd=repo)
         for line in out.splitlines():
             d, s = line.split("\x1f", 1)

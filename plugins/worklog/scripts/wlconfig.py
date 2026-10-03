@@ -68,6 +68,11 @@ class Config:
         self.transcripts_dir = _x(ss.get("transcripts_dir", "~/.claude/projects"))
 
         self.rules = d.get("rules", {}).get("items", [])
+        self.perf_months = d.get("perf", {}).get("months")   # no default — setup / perf asks
+        # [sprint] — only used for the *first* sync window; after that the window starts at the
+        # last sync. source = "jira" (current sprint start from Jira) | "fixed" (anchor + length_days)
+        # | "none" (first_days). No default: setup asks.
+        self.sprint = d.get("sprint", {})
         self.features = d.get("features", {})
 
     # Every collected source and every output can be switched off in [features].

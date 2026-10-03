@@ -6,13 +6,14 @@ same shape as the TOML and this script renders it. Refuses to overwrite an exist
 config unless --force, and keeps a timestamped backup when it does.
 
   write_config.py --from answers.json [--force] [--dry-run]
+  write_config.py --set perf.months=12 [--set features.reviews=false]   # change keys in place (backup kept)
 """
 import argparse, datetime as dt, json, os, shutil, sys, tomllib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wlconfig  # noqa: E402
 
-ORDER = ["identity", "features", "jira", "schedule", "paths", "wiki", "rules"]
+ORDER = ["identity", "features", "jira", "sprint", "schedule", "paths", "wiki", "perf", "rules"]
 REQUIRED = {"identity": ["github_user", "github_orgs", "commit_emails", "code_roots"],
             "paths": ["notes_root", "board", "tracker"]}
 
@@ -60,8 +61,22 @@ def main():
     ap.add_argument("--from", dest="src")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--set", action="append", default=[], metavar="SECTION.KEY=VALUE")
     a = ap.parse_args()
-    d = json.load(open(a.src) if a.src else sys.stdin)
+    if a.set:
+        with open(wlconfig.path(), "rb") as f:
+            d = tomllib.load(f)
+        for kv in a.set:
+            key, _, raw = kv.partition("=")
+            sect, _, k = key.partition(".")
+            try:
+                v = json.loads(raw)          # numbers, true/false, lists
+            except json.JSONDecodeError:
+                v = raw                      # bare strings
+            d.setdefault(sect, {})[k] = v
+        a.force = True
+    else:
+        d = json.load(open(a.src) if a.src else sys.stdin)
     missing = [f"{s}.{k}" for s, ks in REQUIRED.items() for k in ks if not d.get(s, {}).get(k)]
     if missing:
         sys.exit("missing required: " + ", ".join(missing))

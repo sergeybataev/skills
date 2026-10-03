@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Sync window and work-week bookkeeping.
 
-  syncstate.py window          # {"since", "until", "source"} — since = exact time of the last sync
+  syncstate.py window [--sprint-start D]   # {"since", "until", "source"} — since = exact time of the last sync;
+                                           # first sync: start of the current sprint ([sprint] in config)
   syncstate.py mark            # record "synced now"; prints the board's "Last synced" text
   syncstate.py week [--date D] # current work week: start, end, label for the sprint-doc delta
 
 State lives in <notes_root>/<paths.state> (default .worklog/state.json). Without it, the
-window falls back to the board's "Last synced …" line (date or "date HH:MM"), then to 7 days.
+window falls back to the board's "Last synced …" line (date or "date HH:MM"), then — first
+sync — to the start of the user's current sprint:
+  [sprint] source = "jira"   → pass the active sprint's start date as --sprint-start
+           source = "fixed"  → anchor (any sprint's first day) + length_days
+           source = "none"   → first_days back from today
 """
 import argparse, datetime as dt, json, os, re, sys
 
@@ -26,7 +31,24 @@ def read_state():
         return {}
 
 
-def window():
+def sprint_start(given=None):
+    s = CFG.sprint
+    src = s.get("source")
+    today = CFG.now().date()
+    if src == "jira":
+        if not given:
+            sys.exit("first sync: [sprint] source is jira — pass the active sprint's start date as --sprint-start YYYY-MM-DD")
+        return given, "start of the current Jira sprint"
+    if src == "fixed":
+        anchor, n = dt.date.fromisoformat(s["anchor"]), int(s["length_days"])
+        start = anchor + dt.timedelta(days=((today - anchor).days // n) * n)
+        return start.isoformat(), f"start of the current {n}-day sprint"
+    if src == "none" and s.get("first_days"):
+        return (today - dt.timedelta(days=int(s["first_days"]))).isoformat(), f"last {s['first_days']} days"
+    sys.exit("first sync: [sprint] isn't configured — run /worklog:setup (it asks how your sprints work)")
+
+
+def window(given_sprint_start=None):
     now = CFG.now().replace(second=0, microsecond=0)
     st = read_state()
     if st.get("last_synced"):
@@ -39,8 +61,8 @@ def window():
         since = m.group(1) + (f" {m.group(2)}" if m.group(2) else "")
         return {"since": since, "until": now.strftime("%Y-%m-%d %H:%M"),
                 "source": "board 'Last synced' line" + ("" if m.group(2) else " (date only — whole day re-checked)")}
-    since = (now - dt.timedelta(days=7)).strftime("%Y-%m-%d")
-    return {"since": since, "until": now.strftime("%Y-%m-%d %H:%M"), "source": "default: last 7 days"}
+    since, why = sprint_start(given_sprint_start)
+    return {"since": since, "until": now.strftime("%Y-%m-%d %H:%M"), "source": f"first sync: {why}"}
 
 
 def mark():
@@ -66,9 +88,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["window", "mark", "week"])
     ap.add_argument("--date")
+    ap.add_argument("--sprint-start")
     a = ap.parse_args()
     if a.cmd == "window":
-        print(json.dumps(window()))
+        print(json.dumps(window(a.sprint_start)))
     elif a.cmd == "mark":
         print(mark())
     else:

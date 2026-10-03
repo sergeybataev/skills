@@ -35,6 +35,7 @@ Everything specific to you lives in `~/.config/worklog/config.toml` (or `$WORKLO
 - `[schedule]` — timezone and work week
 - `[paths]` — notes folder and the board / tracker / sprint-doc / session-index files inside it, plus `reports` (default `reports/`) with filename templates `closeout_note` (`closeouts/{date}-{slug}.md`) and `perf_report` (`perf/{datetime}.md`). Close-out notes go to llm-wiki when it's enabled, otherwise here; every perf read is saved here.
 - `[wiki]` — llm-wiki hub and topic
+- `[perf]` — `months`: how far back `/worklog:perf` looks. No default — setup asks (quarter, half-year, annual review, since you joined).
 - `[rules]` — your standing rules in plain English ("never open a PR from branch X", "tickets in project Y are closed by support"). The skills treat them as overriding their defaults.
 
 ### Reviews you gave
