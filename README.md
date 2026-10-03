@@ -22,18 +22,18 @@ A personal worklog built from what you actually did — GitHub PRs you wrote, re
 - `gh` (GitHub CLI), authenticated as the account whose PRs you want tracked
 - Python 3.11+ (stdlib only)
 - Optional: the Atlassian MCP server for Jira
-- Optional: [llm-wiki](https://github.com/nvk/llm-wiki) — for the wiki close-out note and per-sync session promotion. The session index works without it (it reads Claude Code's own transcripts); with it, digests add Codex sessions, sessions whose transcript was deleted, and the branch a session ended on.
+- Optional: [llm-wiki](https://github.com/nvk/llm-wiki) — close-out notes go into the wiki instead of the reports folder, and sessions get promoted per sync. The session index works without it (it reads Claude Code's own transcripts); with it, digests add Codex sessions, sessions whose transcript was deleted, and the branch a session ended on.
 
 ### Config
 
 Everything specific to you lives in `~/.config/worklog/config.toml` (or `$WORKLOG_CONFIG`), never in the plugin:
 
-- `[features]` — switch each part on or off: `prs`, `reviews`, `review_response_time` (off by default — one extra API call per reviewed PR), `commits`, `jira`, `transcripts`, `sessions` (llm-wiki digests), `wiki_closeout`, `session_index`, `perf`
+- `[features]` — switch each part on or off: `prs`, `reviews`, `review_response_time` (off by default — one extra API call per reviewed PR), `commits`, `jira`, `transcripts`, `sessions` (llm-wiki digests), `closeout`, `session_index`, `perf`, `perf_save`
 - `[sessions]` — `transcripts_dir` (default `~/.claude/projects`)
 - `[identity]` — GitHub user, orgs, commit emails, code roots, repos, base and integration branches
 - `[jira]` — site, cloud id, sprint field, boards, ticket prefixes, projects someone else transitions, forbidden transitions
 - `[schedule]` — timezone and work week
-- `[paths]` — notes folder and the board / tracker / sprint-doc / session-index files inside it
+- `[paths]` — notes folder and the board / tracker / sprint-doc / session-index files inside it, plus `reports` (default `reports/`) with filename templates `closeout_note` (`closeouts/{date}-{slug}.md`) and `perf_report` (`perf/{datetime}.md`). Close-out notes go to llm-wiki when it's enabled, otherwise here; every perf read is saved here.
 - `[wiki]` — llm-wiki hub and topic
 - `[rules]` — your standing rules in plain English ("never open a PR from branch X", "tickets in project Y are closed by support"). The skills treat them as overriding their defaults.
 

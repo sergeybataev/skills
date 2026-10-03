@@ -12,4 +12,6 @@ python3 $S/perf_metrics.py --months 6          # table (adds reviews columns whe
 python3 $S/perf_metrics.py --months 6 --json   # for further analysis
 ```
 
+**Save the read** (`perf_save`, on by default): once you've written the final answer, save the same markdown — table, narrative, verdict — to the path from `python3 $S/wlconfig.py report-path perf` (`perf/{datetime}.md` under `paths.reports` by default, so repeated runs never overwrite each other). Tell the user where it went. Read previous files in that folder first if the user asks how things changed.
+
 Then read `reference.md` (next to this file) for which metrics have proved meaningful, the other sources to add (Jira, sessions, sprint goal, tracker tags), and how to structure the answer. Apply the config's `rules.items` to tone and framing.

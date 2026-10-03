@@ -17,14 +17,14 @@ python3 -c "import sys; sys.path.insert(0,'$S'); import wlconfig, json; c=wlconf
 
 Read the whole config: identity, Jira, schedule, paths, wiki, **`[features]`** — and **`rules.items`, which are the user's standing rules for this job. They override anything generic below.** Below, `<board>`, `<tracker>` etc. mean the configured paths under `paths.notes_root`.
 
-**`[features]` switches each source and output on or off** — `prs`, `reviews`, `review_response_time`, `commits`, `jira`, `sessions`, `wiki_closeout`, `session_index`, `perf`. Check with `wlconfig.load().on("<name>")` (it applies the defaults: jira follows `jira.enabled`, the session/wiki ones follow `wiki.enabled`, `review_response_time` is off). **Skip every step below whose feature is off, and say once in the reply which ones were skipped** — silently missing sources look like "nothing happened".
+**`[features]` switches each source and output on or off** — `prs`, `reviews`, `review_response_time`, `commits`, `jira`, `transcripts`, `sessions`, `closeout`, `session_index`, `perf`, `perf_save`. Check with `wlconfig.load().on("<name>")` (it applies the defaults: jira follows `jira.enabled`, the session/wiki ones follow `wiki.enabled`, `review_response_time` is off). **Skip every step below whose feature is off, and say once in the reply which ones were skipped** — silently missing sources look like "nothing happened".
 
 | File | Job |
 |---|---|
 | `<board>` | The board: **only what is still open** |
 | `<tracker>` | Append-only done-log, timestamped, origin-tagged |
 | `<sprint_doc>` (`{Month}` → the month in the sprint's name, else its start month) | Week-by-week narrative deltas — one new `## 0` per sync |
-| `<wiki.hub>/topics/<wiki.topic>/raw/notes/YYYY-MM-DD-<slug>.md` | Durable close-out note per sync (if wiki enabled) |
+| close-out note — `python3 $S/wlconfig.py report-path closeout --slug "<words>"` | Durable note per sync: in llm-wiki when the wiki is on, else under `paths.reports` (`closeouts/{date}-{slug}.md` by default) |
 | `<sessions_index>` + `<sessions_db>` | PR/ticket/branch → resumable sessions |
 | `<archive_dir>/YYYY-MM-*` | Previous sprint's board + tracker |
 
@@ -121,7 +121,7 @@ Walk every board item against what you collected. Stale claims are often the mos
 
 **Sprint doc** — every write-sync gets a delta, even a short one (a skipped delta breaks the next window). Insert `## 0. Week-N delta (<since> → <today>)` above the previous one and rename the previous to `## 0b` (shift `0b`→`0c`…). Narrative: what changed, why it matters, what didn't move. No standing sections.
 
-**Wiki close-out** (`wiki_closeout`) — `<hub>/topics/<topic>/raw/notes/<today>-<slug>.md` with frontmatter (`title`, `source: "MANUAL"`, `type: notes`, `ingested`, `tags`, `summary`): effort table, merged list, work with no record, structural gaps. Then add a row at the top of `raw/notes/_index.md` (set `Last updated`), prepend a Recent Changes bullet to `raw/_index.md` and the topic `_index.md`, set its `Sources:` count from an actual file count, and set `promoted_to: ["topics/<topic>/raw/notes/<file>"]` on every in-window digest whose list was empty.
+**Close-out note** (`closeout`) — get the path from `python3 $S/wlconfig.py report-path closeout --slug "<3-6 words>"` (it creates the folder; never hand-build the path). Same content either way; frontmatter (`title`, `source: "MANUAL"`, `type: notes`, `ingested`, `tags`, `summary`): effort table, merged list, work with no record, structural gaps. **Only when the path is inside the llm-wiki hub**: add a row at the top of `raw/notes/_index.md` (set `Last updated`), prepend a Recent Changes bullet to `raw/_index.md` and the topic `_index.md`, set its `Sources:` count from an actual file count, and set `promoted_to: ["topics/<topic>/raw/notes/<file>"]` on every in-window digest whose list was empty.
 
 **Session index** (`session_index`) — `python3 $S/session_index.py`. Reads Claude Code transcripts (`features.transcripts`, cached — a few seconds after the first ~1 min build) and, if the wiki is on, llm-wiki digests. Works without llm-wiki.
 
