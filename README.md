@@ -22,13 +22,14 @@ A personal worklog built from what you actually did — GitHub PRs you wrote, re
 - `gh` (GitHub CLI), authenticated as the account whose PRs you want tracked
 - Python 3.11+ (stdlib only)
 - Optional: the Atlassian MCP server for Jira
-- Optional: [llm-wiki](https://github.com/nvk/llm-wiki) — only for session tracking, the wiki close-out note and the PR↔session index. Without it, set `[wiki] enabled = false`; PRs, reviews, commits, Jira and the perf read all work on their own.
+- Optional: [llm-wiki](https://github.com/nvk/llm-wiki) — for the wiki close-out note and per-sync session promotion. The session index works without it (it reads Claude Code's own transcripts); with it, digests add Codex sessions, sessions whose transcript was deleted, and the branch a session ended on.
 
 ### Config
 
 Everything specific to you lives in `~/.config/worklog/config.toml` (or `$WORKLOG_CONFIG`), never in the plugin:
 
-- `[features]` — switch each part on or off: `prs`, `reviews`, `review_response_time` (off by default — one extra API call per reviewed PR), `commits`, `jira`, `sessions`, `wiki_closeout`, `session_index`, `perf`
+- `[features]` — switch each part on or off: `prs`, `reviews`, `review_response_time` (off by default — one extra API call per reviewed PR), `commits`, `jira`, `transcripts`, `sessions` (llm-wiki digests), `wiki_closeout`, `session_index`, `perf`
+- `[sessions]` — `transcripts_dir` (default `~/.claude/projects`)
 - `[identity]` — GitHub user, orgs, commit emails, code roots, repos, base and integration branches
 - `[jira]` — site, cloud id, sprint field, boards, ticket prefixes, projects someone else transitions, forbidden transitions
 - `[schedule]` — timezone and work week
@@ -45,10 +46,12 @@ PRs you reviewed or commented on that someone else wrote, with your verdict, inl
 
 ### Jump back into a session
 
+Built from Claude Code's transcripts (`~/.claude/projects/*/<id>.jsonl`, parsed once and cached — later rebuilds take seconds), merged with llm-wiki digests if you use it. A session that moved between worktrees is linked to every branch it worked on, and the resume command uses the folder the session was started in — the only place `claude --resume` finds it.
+
 ```bash
 python3 <plugin>/scripts/session_index.py --pr 1234        # resume commands, best evidence first
 python3 <plugin>/scripts/session_index.py --ticket ABC-123
-python3 <plugin>/scripts/session_index.py --branch feature/x
+python3 <plugin>/scripts/session_index.py --branch feature/x       # falls back to sessions that mention it
 ```
 
 ### Safety

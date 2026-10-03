@@ -53,6 +53,9 @@ class Config:
         self.digests = (_x(w.get("digests", os.path.join(self.wiki_hub, ".sessions/digests")))
                         if self.wiki_enabled and self.wiki_hub else None)
 
+        ss = d.get("sessions", {})
+        self.transcripts_dir = _x(ss.get("transcripts_dir", "~/.claude/projects"))
+
         self.rules = d.get("rules", {}).get("items", [])
         self.features = d.get("features", {})
 
@@ -65,9 +68,10 @@ class Config:
         "review_response_time": False,  # time from review request to your review (1 extra API call per PR)
         "commits": True,
         "jira": None,                   # None → follow jira.enabled
-        "sessions": None,               # session digests → follow wiki.enabled
+        "transcripts": True,            # Claude Code transcripts (~/.claude/projects) — no llm-wiki needed
+        "sessions": None,               # llm-wiki session digests → follow wiki.enabled
         "wiki_closeout": None,          # llm-wiki close-out note → follow wiki.enabled
-        "session_index": None,          # PR↔session resume index → follow wiki.enabled
+        "session_index": True,          # PR↔session resume index (transcripts, plus digests when wiki is on)
         "perf": True,                   # /worklog:perf
     }
 

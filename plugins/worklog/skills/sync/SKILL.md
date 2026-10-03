@@ -123,7 +123,7 @@ Walk every board item against what you collected. Stale claims are often the mos
 
 **Wiki close-out** (`wiki_closeout`) — `<hub>/topics/<topic>/raw/notes/<today>-<slug>.md` with frontmatter (`title`, `source: "MANUAL"`, `type: notes`, `ingested`, `tags`, `summary`): effort table, merged list, work with no record, structural gaps. Then add a row at the top of `raw/notes/_index.md` (set `Last updated`), prepend a Recent Changes bullet to `raw/_index.md` and the topic `_index.md`, set its `Sources:` count from an actual file count, and set `promoted_to: ["topics/<topic>/raw/notes/<file>"]` on every in-window digest whose list was empty.
 
-**Session index** (`session_index`) — `python3 $S/session_index.py` (~45 s).
+**Session index** (`session_index`) — `python3 $S/session_index.py`. Reads Claude Code transcripts (`features.transcripts`, cached — a few seconds after the first ~1 min build) and, if the wiki is on, llm-wiki digests. Works without llm-wiki.
 
 Read-only safety: `collect.py` writes only with `--out`; `perf_metrics.py` and `reviews.py` never write; `session_index.py` **does** write — don't run it for report-only requests.
 
