@@ -21,7 +21,8 @@ A personal worklog built from what you actually did — GitHub PRs you wrote, re
 
 - `gh` (GitHub CLI), authenticated as the account whose PRs you want tracked
 - Python 3.11+ (stdlib only)
-- Optional: the Atlassian MCP server for Jira; [llm-wiki](https://github.com/nvk/llm-wiki) session capture for session tracking and resume
+- Optional: the Atlassian MCP server for Jira
+- Optional: [llm-wiki](https://github.com/nvk/llm-wiki) — only for session tracking, the wiki close-out note and the PR↔session index. Without it, set `[wiki] enabled = false`; PRs, reviews, commits, Jira and the perf read all work on their own.
 
 ### Config
 

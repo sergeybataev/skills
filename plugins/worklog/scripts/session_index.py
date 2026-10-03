@@ -71,7 +71,7 @@ def resume_cmd(harness, sid, cwd):
 
 def load_sessions():
     out = []
-    for root, _, files in os.walk(DIGESTS):
+    for root, _, files in os.walk(DIGESTS or "/nonexistent"):
         for f in files:
             if not f.endswith(".md"):
                 continue
@@ -139,6 +139,10 @@ def fetch_prs():
 
 
 def build(args):
+    if not CFG.on("session_index") or not DIGESTS:
+        sys.exit("session index is off — it needs session digests (wiki.enabled + features.session_index)")
+    os.makedirs(os.path.dirname(DB), exist_ok=True)
+    os.makedirs(os.path.dirname(MD), exist_ok=True)
     con = sqlite3.connect(DB)
     con.executescript("""
     CREATE TABLE IF NOT EXISTS prs(repo, number INT, title, branch, state, created, merged, url,

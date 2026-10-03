@@ -154,7 +154,7 @@ def collect_github(since, until):
 def collect_sessions(since, until):
     """{date: {cwd_basename: n}} from llm-wiki session digests (metadata only)."""
     out = collections.defaultdict(collections.Counter)
-    if not os.path.isdir(DIGESTS):
+    if not DIGESTS or not os.path.isdir(DIGESTS):
         return out
     for root, _, files in os.walk(DIGESTS):
         for f in files:

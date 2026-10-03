@@ -50,7 +50,8 @@ class Config:
         self.wiki_enabled = w.get("enabled", False)
         self.wiki_hub = _x(w.get("hub", ""))
         self.wiki_topic = w.get("topic", "worklog")
-        self.digests = _x(w.get("digests", os.path.join(self.wiki_hub, ".sessions/digests")))
+        self.digests = (_x(w.get("digests", os.path.join(self.wiki_hub, ".sessions/digests")))
+                        if self.wiki_enabled and self.wiki_hub else None)
 
         self.rules = d.get("rules", {}).get("items", [])
         self.features = d.get("features", {})
